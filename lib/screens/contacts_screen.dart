@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart';
 import '../models/contact_item.dart';
 import '../models/contact_circle.dart';
 import '../models/call_history.dart';
 import 'add_contact_screen.dart';
+import 'import_contacts_dialog.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -17,6 +19,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
   List<ContactItem> _contacts = [];
   List<ContactCircle> _circles = [];
   String? _selectedCircleId;
+  final _notificationService = NotificationService();
 
   @override
   void initState() {
@@ -43,13 +46,72 @@ class _ContactsScreenState extends State<ContactsScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
       
+      // Attendre un peu avant d'afficher le dialogue
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // Afficher le dialogue de confirmation
+      if (mounted) {
+        _showCallConfirmationDialog(contact);
+      }
+    }
+  }
+  
+  /// Affiche un dialogue pour confirmer l'appel et optionnellement ajouter une note
+  Future<void> _showCallConfirmationDialog(ContactItem contact) async {
+    final noteController = TextEditingController();
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('As-tu appelé ce contact ?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              contact.name,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(
+                labelText: 'Note (optionnel)',
+                hintText: 'Ajouter une note rapide...',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.note),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Oui, j\'ai appelé'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
       // Enregistrer l'appel
       final history = CallHistory.create(
         contactId: contact.id,
         contactName: contact.name,
         callDate: DateTime.now(),
-        durationSeconds: 0, // Durée fictive
+        durationSeconds: 0,
         circleId: contact.circleId,
+        notes: noteController.text.trim().isEmpty 
+            ? null 
+            : noteController.text.trim(),
       );
       await DatabaseService.addHistory(history);
       
@@ -63,14 +125,20 @@ class _ContactsScreenState extends State<ContactsScreen> {
       );
       await contact.save();
       
+      // Reprogrammer la notification
+      await _notificationService.scheduleNotificationForContact(contact, circle);
+      
       _loadData();
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Appel enregistré')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Appel enregistré avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
+    
+    noteController.dispose();
   }
 
   void _filterByCircle(String? circleId) {
@@ -86,6 +154,26 @@ class _ContactsScreenState extends State<ContactsScreen> {
       appBar: AppBar(
         title: const Text('Contacts'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.import_contacts),
+            tooltip: 'Importer depuis téléphone',
+            onPressed: () async {
+              final result = await showDialog<int>(
+                context: context,
+                builder: (context) => const ImportContactsDialog(),
+              );
+              
+              if (result != null && result > 0 && mounted) {
+                _loadData();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('$result contact(s) importé(s)'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.filter_list),
             onSelected: _filterByCircle,

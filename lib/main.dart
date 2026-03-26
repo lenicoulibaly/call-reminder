@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'services/database_service.dart';
+import 'services/notification_service.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
@@ -7,6 +8,9 @@ void main() async {
   
   // Initialiser la base de données Hive
   await DatabaseService.initialize();
+  
+  // Initialiser le service de notifications
+  await NotificationService().initialize();
   
   runApp(const MyApp());
 }

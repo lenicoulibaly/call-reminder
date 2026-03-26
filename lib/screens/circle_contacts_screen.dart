@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart';
 import '../models/contact_circle.dart';
 import '../models/contact_item.dart';
 import '../models/call_history.dart';
@@ -17,6 +18,7 @@ class CircleContactsScreen extends StatefulWidget {
 
 class _CircleContactsScreenState extends State<CircleContactsScreen> {
   List<ContactItem> _contacts = [];
+  final _notificationService = NotificationService();
 
   @override
   void initState() {
@@ -48,31 +50,93 @@ class _CircleContactsScreenState extends State<CircleContactsScreen> {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
       
-      // Enregistrer l'appel
+      // Attendre un peu avant d'afficher le dialogue
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // Afficher le dialogue de confirmation
+      if (mounted) {
+        _showCallConfirmationDialog(contact);
+      }
+    }
+  }
+  
+  Future<void> _showCallConfirmationDialog(ContactItem contact) async {
+    final noteController = TextEditingController();
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('As-tu appelé ce contact ?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              contact.name,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(
+                labelText: 'Note (optionnel)',
+                hintText: 'Ajouter une note rapide...',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.note),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Non'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Oui, j\'ai appelé'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
       final history = CallHistory.create(
         contactId: contact.id,
         contactName: contact.name,
         callDate: DateTime.now(),
         durationSeconds: 0,
         circleId: contact.circleId,
+        notes: noteController.text.trim().isEmpty 
+            ? null 
+            : noteController.text.trim(),
       );
       await DatabaseService.addHistory(history);
       
-      // Mettre à jour le contact
       contact.recordCall(DateTime.now());
       contact.updateNextCallDate(
         DateTime.now().add(Duration(days: widget.circle.callFrequencyDays)),
       );
       await contact.save();
       
+      // Reprogrammer la notification
+      await _notificationService.scheduleNotificationForContact(contact, widget.circle);
+      
       _loadContacts();
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Appel enregistré')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Appel enregistré avec succès'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
+    
+    noteController.dispose();
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../services/notification_service.dart';
 import '../models/contact_item.dart';
 import '../models/contact_circle.dart';
 
@@ -15,6 +16,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _notesController = TextEditingController();
+  final _notificationService = NotificationService();
   
   List<ContactCircle> _circles = [];
   String? _selectedCircleId;
@@ -60,6 +62,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
       );
 
       await DatabaseService.addContact(contact);
+      
+      // Programmer la notification
+      await _notificationService.scheduleNotificationForContact(contact, circle);
 
       if (mounted) {
         Navigator.pop(context);
