@@ -10,6 +10,8 @@ import 'database_service.dart';
 /// - L'accès aux contacts du téléphone
 /// - La détection de doublons
 /// - L'import dans la base de données
+/// 
+/// Note: Non supporté sur Web
 class ContactImportService {
   static final ContactImportService _instance = ContactImportService._internal();
   factory ContactImportService() => _instance;
@@ -18,6 +20,7 @@ class ContactImportService {
   /// Demande la permission d'accès aux contacts
   /// Retourne true si accordée, false sinon
   Future<bool> requestPermission() async {
+    if (kIsWeb) return false;
     return await FlutterContacts.requestPermission(readonly: true);
   }
 
@@ -25,6 +28,8 @@ class ContactImportService {
   /// 
   /// Retourne une liste de contacts ou null si permission refusée
   Future<List<Contact>?> getPhoneContacts() async {
+    if (kIsWeb) return null;
+    
     debugPrint('ContactImportService: Demande de permission flutter_contacts...');
     
     final granted = await FlutterContacts.requestPermission(readonly: true);

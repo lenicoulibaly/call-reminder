@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -12,6 +13,8 @@ import 'database_service.dart';
 /// - La programmation de notifications pour les rappels d'appels
 /// - L'annulation et la mise à jour des notifications
 /// - La reprogrammation au redémarrage de l'app
+/// 
+/// Note: Les notifications ne sont pas supportées sur Web
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
@@ -26,11 +29,19 @@ class NotificationService {
   /// 
   /// Doit être appelé au démarrage de l'application
   /// Configure les paramètres Android et iOS
+  /// Sur Web, cette méthode ne fait rien (notifications non supportées)
   Future<void> initialize() async {
     if (_initialized) return;
+    
+    // Les notifications locales ne sont pas supportées sur Web
+    if (kIsWeb) {
+      _initialized = true;
+      return;
+    }
 
-    // Initialiser les timezones pour les notifications programmées
-    tz.initializeTimeZones();
+    try {
+      // Initialiser les timezones pour les notifications programmées
+      tz.initializeTimeZones();
     
     // Configuration Android
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -60,6 +71,10 @@ class NotificationService {
 
     // Reprogrammer les notifications existantes
     await rescheduleAllNotifications();
+    } catch (e) {
+      // En cas d'erreur, on continue sans notifications
+      _initialized = true;
+    }
   }
 
   /// Demande les permissions de notification
@@ -99,6 +114,9 @@ class NotificationService {
     ContactItem contact,
     ContactCircle circle,
   ) async {
+    // Les notifications ne sont pas supportées sur Web
+    if (kIsWeb) return;
+    
     if (!_initialized) await initialize();
 
     // Annuler l'ancienne notification si elle existe
@@ -228,6 +246,7 @@ class NotificationService {
 
   /// Annule une notification pour un contact
   Future<void> cancelNotification(String contactId) async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     final notificationId = _getNotificationId(contactId);
     await _notifications.cancel(notificationId);
@@ -235,6 +254,7 @@ class NotificationService {
 
   /// Annule toutes les notifications
   Future<void> cancelAllNotifications() async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
     await _notifications.cancelAll();
   }
@@ -244,6 +264,7 @@ class NotificationService {
   /// Appelé au démarrage de l'app pour restaurer les notifications
   /// après un redémarrage du téléphone
   Future<void> rescheduleAllNotifications() async {
+    if (kIsWeb) return;
     if (!_initialized) await initialize();
 
     // Annuler toutes les anciennes notifications
