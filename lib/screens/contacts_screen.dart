@@ -6,7 +6,7 @@ import '../models/contact_item.dart';
 import '../models/contact_circle.dart';
 import '../models/call_history.dart';
 import 'add_contact_screen.dart';
-import 'import_contacts_dialog.dart';
+import 'phone_contacts_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -155,23 +155,15 @@ class _ContactsScreenState extends State<ContactsScreen> {
         title: const Text('Contacts'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.import_contacts),
-            tooltip: 'Importer depuis téléphone',
-            onPressed: () async {
-              final result = await showDialog<int>(
-                context: context,
-                builder: (context) => const ImportContactsDialog(),
-              );
-              
-              if (result != null && result > 0 && mounted) {
-                _loadData();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('$result contact(s) importé(s)'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
+            icon: const Icon(Icons.phone_android),
+            tooltip: 'Voir contacts du téléphone',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PhoneContactsScreen(),
+                ),
+              ).then((_) => _loadData());
             },
           ),
           PopupMenuButton<String>(
