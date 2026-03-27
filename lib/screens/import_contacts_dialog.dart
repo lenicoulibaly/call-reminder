@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/contact_import_service.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
@@ -22,6 +23,7 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
   String? _selectedCircleId;
   bool _loading = true;
   String? _errorMessage;
+  String _searchQuery = '';
   
   final Set<String> _selectedContacts = {};
 
@@ -46,12 +48,18 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
     // Charger les contacts du téléphone
     final contacts = await _importService.getPhoneContacts();
     
+    debugPrint('ImportContactsDialog: Contacts reçus = ${contacts?.length}');
+    
     if (contacts == null) {
       setState(() {
-        _errorMessage = 'Permission d\'accès aux contacts refusée';
+        _errorMessage = 'Accès aux contacts refusé.\n\nSi le dialogue de permission ne s\'est pas affiché, allez dans Paramètres > Applications > call_reminder > Permissions et activez "Contacts".';
         _loading = false;
       });
       return;
+    }
+
+    if (contacts.isEmpty) {
+      debugPrint('ImportContactsDialog: La liste de contacts est vide');
     }
 
     setState(() {
@@ -83,7 +91,11 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
     );
 
     // Reprogrammer les notifications pour les nouveaux contacts
-    await _notificationService.rescheduleAllNotifications();
+    try {
+      await _notificationService.rescheduleAllNotifications();
+    } catch (e) {
+      debugPrint('Erreur lors de la reprogrammation des notifications: $e');
+    }
 
     // Fermer le dialogue de chargement
     if (mounted) Navigator.pop(context);
@@ -193,6 +205,24 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
               ),
             const SizedBox(height: 16),
 
+            // Champ de recherche
+            if (!_loading && _phoneContacts != null && _phoneContacts!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher un contact...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value.toLowerCase();
+                    });
+                  },
+                ),
+              ),
+
             // Liste des contacts
             Expanded(
               child: _loading
@@ -203,9 +233,9 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(
-                                Icons.error_outline,
+                                Icons.contacts,
                                 size: 64,
-                                color: Colors.red,
+                                color: Colors.orange,
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -213,9 +243,16 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
                                 textAlign: TextAlign.center,
                               ),
                               const SizedBox(height: 16),
-                              ElevatedButton(
+                              ElevatedButton.icon(
                                 onPressed: _loadData,
-                                child: const Text('Réessayer'),
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Réessayer'),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () => openAppSettings(),
+                                icon: const Icon(Icons.settings),
+                                label: const Text('Ouvrir les paramètres'),
                               ),
                             ],
                           ),
@@ -225,9 +262,14 @@ class _ImportContactsDialogState extends State<ImportContactsDialog> {
                               child: Text('Aucun contact trouvé'),
                             )
                           : ListView.builder(
-                              itemCount: _phoneContacts!.length,
+                              itemCount: _phoneContacts!
+                                  .where((c) => c.displayName.toLowerCase().contains(_searchQuery))
+                                  .length,
                               itemBuilder: (context, index) {
-                                final contact = _phoneContacts![index];
+                                final filteredList = _phoneContacts!
+                                    .where((c) => c.displayName.toLowerCase().contains(_searchQuery))
+                                    .toList();
+                                final contact = filteredList[index];
                                 final isSelected = _selectedContacts.contains(contact.id);
                                 
                                 // Vérifier si c'est un doublon

@@ -267,17 +267,22 @@ class NotificationService {
     }
   }
 
-  /// Convertit un ID de contact en ID de notification unique
+  /// Convertit un ID de contact en ID de notification unique (int 32-bit)
   /// 
-  /// Utilise un hash simple pour garantir l'unicité
+  /// Utilise un hash déterministe pour garantir l'unicité dans la limite des 32 bits
   int _getNotificationId(String contactId) {
-    // Simple hash de l'ID du contact pour obtenir un int unique
+    // Hash simple de la chaîne contactId
     int hash = 0;
     for (int i = 0; i < contactId.length; i++) {
-      hash = ((hash << 5) - hash) + contactId.codeUnitAt(i);
-      hash = hash & hash; // Convertir en 32bit integer
+      hash = (hash * 31 + contactId.codeUnitAt(i)) & 0xFFFFFFFF;
     }
-    return hash.abs();
+    
+    // Convertir en entier 32 bits signé pour Android (-2^31 à 2^31 - 1)
+    if (hash > 0x7FFFFFFF) {
+      hash -= 0x100000000;
+    }
+    
+    return hash;
   }
 
   /// Teste les notifications (utile pour debug)

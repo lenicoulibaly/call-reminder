@@ -64,13 +64,18 @@ class _AddContactScreenState extends State<AddContactScreen> {
       await DatabaseService.addContact(contact);
       
       // Programmer la notification
-      await _notificationService.scheduleNotificationForContact(contact, circle);
+      try {
+        await _notificationService.scheduleNotificationForContact(contact, circle);
+      } catch (e) {
+        debugPrint('Erreur lors de la programmation de la notification: $e');
+        // On continue même si la notification échoue
+      }
 
       if (mounted) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Contact ajouté avec succès')),
         );
+        Navigator.pop(context);
       }
     }
   }

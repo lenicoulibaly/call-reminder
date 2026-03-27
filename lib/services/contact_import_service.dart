@@ -1,12 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../models/contact_item.dart';
 import 'database_service.dart';
 
 /// Service d'import de contacts depuis le téléphone
 /// 
 /// Gère :
-/// - La demande de permissions
+/// - La demande de permissions (via flutter_contacts natif)
 /// - L'accès aux contacts du téléphone
 /// - La détection de doublons
 /// - L'import dans la base de données
@@ -15,39 +15,44 @@ class ContactImportService {
   factory ContactImportService() => _instance;
   ContactImportService._internal();
 
-  /// Vérifie si la permission d'accès aux contacts est accordée
-  Future<bool> hasPermission() async {
-    final status = await Permission.contacts.status;
-    return status.isGranted;
-  }
-
   /// Demande la permission d'accès aux contacts
-  /// 
   /// Retourne true si accordée, false sinon
   Future<bool> requestPermission() async {
-    final status = await Permission.contacts.request();
-    return status.isGranted;
+    return await FlutterContacts.requestPermission(readonly: true);
   }
 
   /// Récupère tous les contacts du téléphone
   /// 
   /// Retourne une liste de contacts ou null si permission refusée
   Future<List<Contact>?> getPhoneContacts() async {
-    // Vérifier/demander la permission
-    final hasPermission = await this.hasPermission() || await requestPermission();
+    debugPrint('ContactImportService: Demande de permission flutter_contacts...');
     
-    if (!hasPermission) {
+    final granted = await FlutterContacts.requestPermission(readonly: true);
+    debugPrint('ContactImportService: Permission accordée = $granted');
+    
+    if (!granted) {
+      debugPrint('ContactImportService: Permission refusée - l\'utilisateur doit aller dans les paramètres');
       return null;
     }
 
-    // Récupérer les contacts avec leurs numéros de téléphone
-    final contacts = await FlutterContacts.getContacts(
-      withProperties: true,
-      withPhoto: false, // Pas besoin des photos pour l'instant
-    );
-
-    // Filtrer seulement les contacts avec au moins un numéro
-    return contacts.where((c) => c.phones.isNotEmpty).toList();
+    try {
+      debugPrint('ContactImportService: Récupération des contacts...');
+      
+      final contacts = await FlutterContacts.getContacts(
+        withProperties: true,
+        withPhoto: false,
+      );
+      
+      debugPrint('ContactImportService: ${contacts.length} contacts récupérés au total');
+      
+      final filtered = contacts.where((c) => c.phones.isNotEmpty).toList();
+      debugPrint('ContactImportService: ${filtered.length} contacts avec numéro de téléphone');
+      
+      return filtered;
+    } catch (e) {
+      debugPrint('ContactImportService: Erreur = $e');
+      return [];
+    }
   }
 
   /// Vérifie si un numéro existe déjà dans la base de données
@@ -178,12 +183,6 @@ class ContactImportService {
 
   /// Recherche des contacts par nom
   Future<List<Contact>?> searchContacts(String query) async {
-    final hasPermission = await this.hasPermission() || await requestPermission();
-    
-    if (!hasPermission) {
-      return null;
-    }
-
     final allContacts = await getPhoneContacts();
     if (allContacts == null) return null;
 
